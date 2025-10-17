@@ -2,21 +2,31 @@ package org.firstinspires.ftc.teamcode.config;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.subsystems.ArmSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.ClawSubsystem;
+import org.gentrifiedApps.gentrifiedAppsUtil.classes.Scribe;
+import org.gentrifiedApps.gentrifiedAppsUtil.classes.drive.DrivePowerCoefficients;
+import org.gentrifiedApps.gentrifiedAppsUtil.drive.MecanumDriver;
+import org.gentrifiedApps.gentrifiedAppsUtil.hardware.motor.PIDMotor;
+import org.gentrifiedApps.gentrifiedAppsUtil.hardware.servo.ServoPlus;
+import org.gentrifiedApps.gentrifiedAppsUtil.heatseeker.Driver;
+import org.gentrifiedApps.gentrifiedAppsUtil.looptime.LoopTimeController;
 
 public class HardwareConfig {
     LinearOpMode opMode = null;
     Telemetry telemetry = null;
     DcMotor motorTest = null;
-    DcMotor fl = null;
-    DcMotor fr = null;
-    DcMotor bl = null;
-    DcMotor br = null;
+
+    Driver drive = null;
+    LoopTimeController ltc = new LoopTimeController();
+    ServoPlus sPlus = null;
+    // package pid controller and motor
+    PIDMotor pMotor = null;
 
     public ArmSubsystem armsub = null;
     public ClawSubsystem clawsub = null;
@@ -34,15 +44,18 @@ public class HardwareConfig {
         motorTest = hw.dcMotor.get("motorTest");
         motorTest.setDirection(DcMotor.Direction.FORWARD);
         motorTest.setPower(0);
-        fl = hw.dcMotor.get("frontLeft");
-        fr = hw.dcMotor.get("frontRight");
-        bl = hw.dcMotor.get("backLeft");
-        br = hw.dcMotor.get("backRight");
-        fl.setDirection(DcMotor.Direction.FORWARD);
-        fr.setDirection(DcMotor.Direction.REVERSE);
-        bl.setDirection(DcMotor.Direction.FORWARD);
-        br.setDirection(DcMotor.Direction.REVERSE);
         runtime.reset();
+
+        sPlus = new ServoPlus(hw, "sPlus");
+
+        pMotor = new PIDMotor(hw, "pMotor");
+        pMotor.setPIDF(0.0,0.0,0.0,0.0);
+        pMotor.setPIDPower();
+
+
+        drive = new Driver(opMode,"frontLeft", "frontRight", "backLeft", "backRight", DcMotorSimple.Direction.FORWARD, DcMotorSimple.Direction.REVERSE, DcMotorSimple.Direction.FORWARD, DcMotorSimple.Direction.REVERSE);
+        ltc.reset();
+        Scribe.getInstance().startLogger(opMode);
     }
     public void buildTelemetry(){
         telemetry.addData("Status", "Run Time: " + runtime.toString());
@@ -50,24 +63,22 @@ public class HardwareConfig {
         telemetry.addData("Gamepad down", opMode.gamepad1.dpad_down);
         armsub.telemetry(telemetry);
         clawsub.telemetry(telemetry);
+        ltc.telemetry(telemetry);
         telemetry.update();
     }
     public void doBulk(){
-        double y = -opMode.gamepad1.left_stick_y;
-        double x = opMode.gamepad1.left_stick_x * 1.1;
-        double rx = opMode.gamepad1.right_stick_x;
-        double denominator = Math.max(Math.abs(y) + Math.abs(x) + Math.abs(rx), 1);
-        double frontLeftPower = (y + x + rx) / denominator;
-        double backLeftPower = (y - x + rx) / denominator;
-        double frontRightPower = (y - x - rx) / denominator;
-        double backRightPower = (y + x - rx) / denominator;
+        DrivePowerCoefficients powers = MecanumDriver.driveMecanum(opMode.gamepad1.left_stick_x,-opMode.gamepad1.left_stick_y,opMode.gamepad1.right_stick_x);
+
+
         motorTest.setPower(opMode.gamepad1.right_trigger);
         // control any subsystems
 
         if (opMode.gamepad1.a){
             armsub.m1Power = 1.0;
+            Scribe.getInstance().logData("Arm powered to 1.0");
         }else{
             armsub.m1Power = 0.0;
+            sPlus.setPosition(90);
         }
 
         if (opMode.gamepad1.b){
@@ -77,12 +88,10 @@ public class HardwareConfig {
         }else{
             clawsub.setClawIdle();
         }
+        ltc.update();
 
 
-        fl.setPower(frontLeftPower);
-        bl.setPower(backLeftPower);
-        fr.setPower(frontRightPower);
-        br.setPower(backRightPower);
+        drive.setWheelPower(powers);
         armsub.update();
         clawsub.update();
         buildTelemetry();

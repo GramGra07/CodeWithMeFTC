@@ -13,6 +13,7 @@ public class ArmSubsystem {
         this.auto = auto;
         m1 = hwMap.get(DcMotor.class, "m1");
         // reverse if needed
+        //init()
 
     }
 
